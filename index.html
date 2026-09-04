@@ -330,8 +330,8 @@
 
     function handleBleReceive(event) {
         const value = new TextDecoder().decode(event.target.value);
-        console.log('受信データ:', value);
-        // ここで受信したパケットを解析し、UIに反映させます
+        const logArea = document.getElementById('log-data-area');
+        logArea.innerHTML += `<p style="color: blue; margin: 2px 0;">[PIC32から受信]: ${value}</p>`;
     }
 
     async function sendSettings() {
