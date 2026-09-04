@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Diver App</title>
+    <style>
+        :root {
+            --bg-color: #f0f0f0;
+            --btn-color: #ffffff;
+            --text-color: #333;
+            --border-color: #ccc;
+            --highlight: #007bff;
+        }
+        body {
+            font-family: sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 10px;
+            display: flex;
+            justify-content: center;
+        }
+        #app-container {
+            width: 100%;
+            max-width: 400px;
+            background: #fff;
+            min-height: 95vh;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            position: relative;
+            overflow: hidden;
+        }
+        .screen {
+            display: none;
+            padding: 20px;
+            flex-direction: column;
+            height: 100%;
+            box-sizing: border-box;
+        }
+        .screen.active {
+            display: flex;
+        }
+        
+        /* 共通ディスプレイ */
+        .display-box {
+            border: 2px solid var(--text-color);
+            padding: 15px;
+            font-size: 24px;
+            text-align: right;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .display-box span.title {
+            font-size: 18px;
+        }
+
+        /* メイン画面ボタン群 */
+        .main-buttons {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .btn-main {
+            border: 1px solid var(--text-color);
+            background: var(--btn-color);
+            padding: 15px 10px;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            flex: 1 1 40%;
+            text-align: center;
+        }
+        
+        /* テンキー画面 */
+        .keypad {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+        .key-btn {
+            border: 1px solid var(--text-color);
+            background: var(--btn-color);
+            font-size: 20px;
+            padding: 20px 0;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .key-btn:active {
+            background-color: #ddd;
+        }
+        
+        /* BLE接続ボタン */
+        #ble-connect-btn {
+            background-color: var(--highlight);
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        /* ログデータ表示エリア */
+        #log-data-area {
+            margin-top: 20px;
+            border-top: 1px solid var(--border-color);
+            padding-top: 10px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="app-container">
+
+    <!-- 1. メイン画面 -->
+    <div id="screen-main" class="screen active">
+        <button id="ble-connect-btn">RN4870 (BLE) に接続</button>
+
+        <div class="display-box" onclick="openKeypad('depth')">
+            <span class="title">設定水深</span>
+            <span id="main-depth-val">-- m</span>
+        </div>
+        
+        <div class="display-box" onclick="openKeypad('time')">
+            <span class="title">設定時間</span>
+            <span id="main-time-val">-- 分</span>
+        </div>
+
+        <div class="main-buttons">
+            <button class="btn-main" onclick="sendSettings()">送信</button>
+            <button class="btn-main" onclick="openKeypad('log_month')">ログ受信</button>
+            <button class="btn-main">ログ送信</button>
+        </div>
+
+        <div id="log-data-area"></div>
+    </div>
+
+    <!-- 2. テンキー画面 -->
+    <div id="screen-keypad" class="screen">
+        <div class="display-box">
+            <span class="title" id="keypad-title">設定水深</span>
+            <span id="keypad-display"></span>
+        </div>
+
+        <div class="keypad">
+            <button class="key-btn" onclick="appendNum('1')">1</button>
+            <button class="key-btn" onclick="appendNum('4')">4</button>
+            <button class="key-btn" onclick="appendNum('7')">7</button>
+            <button class="key-btn" onclick="appendNum('0')">0</button>
+            
+            <button class="key-btn" onclick="appendNum('2')">2</button>
+            <button class="key-btn" onclick="appendNum('5')">5</button>
+            <button class="key-btn" onclick="appendNum('8')">8</button>
+            <button class="key-btn" onclick="backSpace()">back</button>
+            
+            <button class="key-btn" onclick="appendNum('3')">3</button>
+            <button class="key-btn" onclick="appendNum('6')">6</button>
+            <button class="key-btn" onclick="appendNum('9')">9</button>
+            <button class="key-btn" onclick="enterKey()">enter</button>
+        </div>
+    </div>
+
+    <!-- 3. ログ取得画面 -->
+    <div id="screen-log-fetch" class="screen">
+        <div class="display-box" style="justify-content: center; flex-direction: column;">
+            <div id="fetch-date-title" style="font-size: 20px; font-weight: bold; margin-bottom: 20px;">--月--日</div>
+            <div id="fetch-status-text" style="font-size: 18px; margin-bottom: 30px;">ログデーター取得中</div>
+            <button id="fetch-enter-btn" class="key-btn" style="width: 100%; display: none;" onclick="finishLogFetch()">enter</button>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // --- UI制御ロジック ---
+    let inputMode = ''; // 'depth', 'time', 'log_month', 'log_day'
+    let currentInput = '';
+    let targetMonth = '';
+    let targetDay = '';
+    let depthVal = '--';
+    let timeVal = '--';
+
+    const screens = {
+        main: document.getElementById('screen-main'),
+        keypad: document.getElementById('screen-keypad'),
+        fetch: document.getElementById('screen-log-fetch')
+    };
+
+    function showScreen(screenName) {
+        Object.values(screens).forEach(s => s.classList.remove('active'));
+        screens[screenName].classList.add('active');
+    }
+
+    function openKeypad(mode) {
+        inputMode = mode;
+        currentInput = '';
+        
+        const titleEl = document.getElementById('keypad-title');
+        const displayEl = document.getElementById('keypad-display');
+
+        if (mode === 'depth') {
+            titleEl.innerText = '設定水深';
+            displayEl.innerText = 'm';
+        } else if (mode === 'time') {
+            titleEl.innerText = '設定時間';
+            displayEl.innerText = '分';
+        } else if (mode === 'log_month') {
+            titleEl.innerText = '日付';
+            displayEl.innerText = '月 日';
+        } else if (mode === 'log_day') {
+            titleEl.innerText = `日付 ${targetMonth}月`;
+            displayEl.innerText = '日';
+        }
+        showScreen('keypad');
+    }
+
+    function appendNum(num) {
+        currentInput += num;
+        updateKeypadDisplay();
+    }
+
+    function backSpace() {
+        currentInput = currentInput.slice(0, -1);
+        updateKeypadDisplay();
+    }
+
+    function updateKeypadDisplay() {
+        const displayEl = document.getElementById('keypad-display');
+        let unit = '';
+        if (inputMode === 'depth') unit = 'm';
+        else if (inputMode === 'time') unit = '分';
+        else if (inputMode === 'log_month') unit = '月';
+        else if (inputMode === 'log_day') unit = '日';
+        
+        displayEl.innerText = currentInput ? currentInput + unit : unit;
+    }
+
+    function enterKey() {
+        if (inputMode === 'depth') {
+            depthVal = currentInput || '--';
+            document.getElementById('main-depth-val').innerText = depthVal + ' m';
+            showScreen('main');
+        } 
+        else if (inputMode === 'time') {
+            timeVal = currentInput || '--';
+            document.getElementById('main-time-val').innerText = timeVal + ' 分';
+            showScreen('main');
+        } 
+        else if (inputMode === 'log_month') {
+            targetMonth = currentInput || '--';
+            openKeypad('log_day');
+        } 
+        else if (inputMode === 'log_day') {
+            targetDay = currentInput || '--';
+            startLogFetch();
+        }
+    }
+
+    function startLogFetch() {
+        showScreen('fetch');
+        document.getElementById('fetch-date-title').innerText = `${targetMonth}月${targetDay}日`;
+        document.getElementById('fetch-status-text').innerText = 'ログデーター取得中';
+        document.getElementById('fetch-enter-btn').style.display = 'none';
+
+        if (bleCharacteristic) {
+            // BLEでマイコンにログ要求コマンドを送信
+            const cmd = `GET_LOG,${targetMonth},${targetDay}\n`;
+            sendBleData(cmd);
+        }
+
+        // ダミーの取得待機処理 (3秒後に完了表示)
+        setTimeout(() => {
+            document.getElementById('fetch-status-text').innerText = 'ログデーター取得完了';
+            document.getElementById('fetch-enter-btn').style.display = 'block';
+            
+            // テスト用ダミーデータ表示
+            document.getElementById('log-data-area').innerHTML = `
+                <p><strong>取得ログ: ${targetMonth}月${targetDay}日</strong></p>
+                <p>10:00 - 水深 15m (潜水時間 45分)</p>
+                <p>14:30 - 水深 20m (潜水時間 50分)</p>
+            `;
+        }, 3000);
+    }
+
+    function finishLogFetch() {
+        showScreen('main');
+    }
+
+    // --- BLE (RN4870) 通信ロジック ---
+    const RN4870_SERVICE_UUID = '49535343-fe7d-4ae5-8fa9-9fafd205e455';
+    const RN4870_RX_CHAR_UUID = '49535343-8841-43f4-a8d4-ecbe34729bb3'; // スマホからRN4870へ送信（Write）
+    const RN4870_TX_CHAR_UUID = '49535343-1e4d-4bd9-ba61-23c647249616'; // RN4870からスマホへ受信（Notify）
+    let bleDevice;
+    let bleCharacteristic;
+
+    document.getElementById('ble-connect-btn').addEventListener('click', async () => {
+        try {
+            bleDevice = await navigator.bluetooth.requestDevice({
+                filters: [{ services: [RN4870_SERVICE_UUID] }],
+                optionalServices: [RN4870_SERVICE_UUID]
+            });
+
+            const server = await bleDevice.gatt.connect();
+            const service = await server.getPrimaryService(RN4870_SERVICE_UUID);
+            
+            // 送信（スマホ→RN4870）キャラクタリスティックの取得
+            bleCharacteristic = await service.getCharacteristic(RN4870_RX_CHAR_UUID);
+            
+            // 受信（RN4870→スマホ）キャラクタリスティックの取得と通知設定
+            const txChar = await service.getCharacteristic(RN4870_TX_CHAR_UUID);
+            await txChar.startNotifications();
+            txChar.addEventListener('characteristicvaluechanged', handleBleReceive);
+
+            document.getElementById('ble-connect-btn').innerText = '接続済み';
+            document.getElementById('ble-connect-btn').style.backgroundColor = '#28a745';
+        } catch (error) {
+            console.error('BLE Connection Error:', error);
+            alert('接続に失敗しました。モジュールの電源とBluetooth設定を確認してください。');
+        }
+    });
+
+    function handleBleReceive(event) {
+        const value = new TextDecoder().decode(event.target.value);
+        console.log('受信データ:', value);
+        // ここで受信したパケットを解析し、UIに反映させます
+    }
+
+    async function sendSettings() {
+        if (!bleCharacteristic) {
+            alert('BLEデバイスに接続されていません。');
+            return;
+        }
+        if (depthVal === '--' || timeVal === '--') {
+            alert('水深と時間を設定してください。');
+            return;
+        }
+        const cmd = `SET,${depthVal},${timeVal}\n`;
+        await sendBleData(cmd);
+        alert(`設定を送信しました:\n水深: ${depthVal}m\n時間: ${timeVal}分`);
+    }
+
+    async function sendBleData(text) {
+        const encoder = new TextEncoder();
+        await bleCharacteristic.writeValue(encoder.encode(text));
+    }
+</script>
+
+</body>
+</html>
