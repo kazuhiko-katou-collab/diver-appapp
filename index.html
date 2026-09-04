@@ -324,6 +324,7 @@
         } catch (error) {
             console.error('BLE Connection Error:', error);
             alert('接続に失敗しました。モジュールの電源とBluetooth設定を確認してください。');
+            alert('エラー詳細: ' + error.message);
         }
     });
 
