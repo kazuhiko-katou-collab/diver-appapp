@@ -304,7 +304,7 @@
     document.getElementById('ble-connect-btn').addEventListener('click', async () => {
         try {
             bleDevice = await navigator.bluetooth.requestDevice({
-                filters: [{ services: [RN4870_SERVICE_UUID] }],
+                acceptAllDevices: true,
                 optionalServices: [RN4870_SERVICE_UUID]
             });
 
