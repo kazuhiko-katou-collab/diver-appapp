@@ -105,6 +105,7 @@
             margin-bottom: 20px;
             font-size: 16px;
             cursor: pointer;
+            width: 100%;
         }
 
         /* ログデータ表示エリア */
@@ -113,6 +114,8 @@
             border-top: 1px solid var(--border-color);
             padding-top: 10px;
             font-size: 14px;
+            max-height: 200px;
+            overflow-y: auto;
         }
     </style>
 </head>
@@ -137,7 +140,7 @@
         <div class="main-buttons">
             <button class="btn-main" onclick="sendSettings()">送信</button>
             <button class="btn-main" onclick="openKeypad('log_month')">ログ受信</button>
-            <button class="btn-main">ログ送信</button>
+            <button class="btn-main" onclick="sendLogData()">ログ送信</button>
         </div>
 
         <div id="log-data-area"></div>
@@ -173,6 +176,7 @@
         <div class="display-box" style="justify-content: center; flex-direction: column;">
             <div id="fetch-date-title" style="font-size: 20px; font-weight: bold; margin-bottom: 20px;">--月--日</div>
             <div id="fetch-status-text" style="font-size: 18px; margin-bottom: 30px;">ログデーター取得中</div>
+            <div id="fetch-result-area" style="font-size: 14px; margin-bottom: 20px; width: 100%; text-align: left;"></div>
             <button id="fetch-enter-btn" class="key-btn" style="width: 100%; display: none;" onclick="finishLogFetch()">enter</button>
         </div>
     </div>
@@ -181,7 +185,7 @@
 
 <script>
     // --- UI制御ロジック ---
-    let inputMode = ''; // 'depth', 'time', 'log_month', 'log_day'
+    let inputMode = '';
     let currentInput = '';
     let targetMonth = '';
     let targetDay = '';
@@ -268,70 +272,108 @@
         showScreen('fetch');
         document.getElementById('fetch-date-title').innerText = `${targetMonth}月${targetDay}日`;
         document.getElementById('fetch-status-text').innerText = 'ログデーター取得中';
+        document.getElementById('fetch-result-area').innerHTML = '';
         document.getElementById('fetch-enter-btn').style.display = 'none';
 
         if (bleCharacteristic) {
-            // BLEでマイコンにログ要求コマンドを送信
             const cmd = `GET_LOG,${targetMonth},${targetDay}\n`;
             sendBleData(cmd);
         }
-
-        // ダミーの取得待機処理 (3秒後に完了表示)
-        setTimeout(() => {
-            document.getElementById('fetch-status-text').innerText = 'ログデーター取得完了';
-            document.getElementById('fetch-enter-btn').style.display = 'block';
-            
-            // テスト用ダミーデータ表示
-            document.getElementById('log-data-area').innerHTML = `
-                <p><strong>取得ログ: ${targetMonth}月${targetDay}日</strong></p>
-                <p>10:00 - 水深 15m (潜水時間 45分)</p>
-                <p>14:30 - 水深 20m (潜水時間 50分)</p>
-            `;
-        }, 3000);
     }
 
     function finishLogFetch() {
         showScreen('main');
     }
 
+    function sendLogData() {
+        if (!bleCharacteristic) {
+            alert('BLEデバイスに接続されていません。');
+            return;
+        }
+        alert('ログ送信機能は現在準備中です。');
+    }
+
     // --- BLE (RN4870) 通信ロジック ---
     const RN4870_SERVICE_UUID = '49535343-fe7d-4ae5-8fa9-9fafd205e455';
-    const RN4870_RX_CHAR_UUID = '49535343-8841-43f4-a8d4-ecbe34729bb3'; // スマホからRN4870へ送信（Write）
-    const RN4870_TX_CHAR_UUID = '49535343-1e4d-4bd9-ba61-23c647249616'; // RN4870からスマホへ受信（Notify）
+    const RN4870_RX_CHAR_UUID = '49535343-8841-43f4-a8d4-ecbe34729bb3';
+    const RN4870_TX_CHAR_UUID = '49535343-1e4d-4bd9-ba61-23c647249616';
     let bleDevice;
     let bleCharacteristic;
 
-    document.getElementById('ble-connect-btn').addEventListener('click', async () => {
+    // 受信データを行単位にまとめるためのバッファ
+    let receiveLineBuffer = '';
+
+    const connectBtn = document.getElementById('ble-connect-btn');
+
+    connectBtn.addEventListener('click', async () => {
         try {
             bleDevice = await navigator.bluetooth.requestDevice({
                 acceptAllDevices: true,
                 optionalServices: [RN4870_SERVICE_UUID]
             });
 
+            // 切断イベントの監視（切れたらボタンを赤く戻す）
+            bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+
             const server = await bleDevice.gatt.connect();
             const service = await server.getPrimaryService(RN4870_SERVICE_UUID);
             
-            // 送信（スマホ→RN4870）キャラクタリスティックの取得
             bleCharacteristic = await service.getCharacteristic(RN4870_RX_CHAR_UUID);
             
-            // 受信（RN4870→スマホ）キャラクタリスティックの取得と通知設定
             const txChar = await service.getCharacteristic(RN4870_TX_CHAR_UUID);
             await txChar.startNotifications();
             txChar.addEventListener('characteristicvaluechanged', handleBleReceive);
 
-            document.getElementById('ble-connect-btn').innerText = '接続済み';
-            document.getElementById('ble-connect-btn').style.backgroundColor = '#28a745';
+            connectBtn.innerText = '接続済み';
+            connectBtn.style.backgroundColor = '#28a745';
         } catch (error) {
             console.error('BLE Connection Error:', error);
-            alert('接続に失敗しました。モジュールの電源とBluetooth設定を確認してください。');
-            alert('エラー詳細: ' + error.message);
+            alert('接続に失敗しました: ' + error.message);
         }
     });
 
-    function handleBleReceive(event) {
-        const value = new TextDecoder().decode(event.target.value);
+    function onDisconnected() {
+        bleCharacteristic = null;
+        connectBtn.innerText = '切断されました (再接続)';
+        connectBtn.style.backgroundColor = '#dc3545';
         const logArea = document.getElementById('log-data-area');
-        logArea.innerHTML += `<p style="color: blue; margin: 2px 0;">[PIC32から受信]: ${value}</p>`;
+        logArea.innerHTML += `<p style="color: red; margin: 2px 0;">[BLE]: 切断されました</p>`;
+    }
+
+    // 1バイト単位で細切れに届くデータを「改行」で1行にまとめて処理
+    function handleBleReceive(event) {
+        const text = new TextDecoder().decode(event.target.value);
+        receiveLineBuffer += text;
+
+        if (receiveLineBuffer.includes('\n') || receiveLineBuffer.includes('\r')) {
+            const lines = receiveLineBuffer.split(/[\r\n]+/);
+            // 最後の要素は改行後の未完了文字列として保持
+            receiveLineBuffer = lines.pop();
+
+            lines.forEach(line => {
+                line = line.trim();
+                if (line.length > 0) {
+                    processReceivedLine(line);
+                }
+            });
+        }
+    }
+
+    function processReceivedLine(line) {
+        const logArea = document.getElementById('log-data-area');
+        logArea.innerHTML += `<p style="color: blue; margin: 2px 0;">[PIC32から受信]: ${line}</p>`;
+        logArea.scrollTop = logArea.scrollHeight;
+
+        // ログ取得画面が開いている場合の受信処理
+        if (screens.fetch.classList.contains('active')) {
+            const resultArea = document.getElementById('fetch-result-area');
+            resultArea.innerHTML += `<p style="margin: 4px 0;">${line}</p>`;
+
+            if (line.includes('LOG_END') || line.includes('[OK_STORED]')) {
+                document.getElementById('fetch-status-text').innerText = 'ログデーター取得完了';
+                document.getElementById('fetch-enter-btn').style.display = 'block';
+            }
+        }
     }
 
     async function sendSettings() {
@@ -345,7 +387,10 @@
         }
         const cmd = `SET,${depthVal},${timeVal}\n`;
         await sendBleData(cmd);
-        alert(`設定を送信しました:\n水深: ${depthVal}m\n時間: ${timeVal}分`);
+        
+        const logArea = document.getElementById('log-data-area');
+        logArea.innerHTML += `<p style="color: green; margin: 2px 0;">[送信]: ${cmd.trim()}</p>`;
+        logArea.scrollTop = logArea.scrollHeight;
     }
 
     async function sendBleData(text) {
