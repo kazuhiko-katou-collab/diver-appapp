@@ -295,53 +295,90 @@
 
     // --- BLE (RN4870) 通信ロジック ---
     const RN4870_SERVICE_UUID = '49535343-fe7d-4ae5-8fa9-9fafd205e455';
-    const RN4870_RX_CHAR_UUID = '49535343-8841-43f4-a8d4-ecbe34729bb3';
-    const RN4870_TX_CHAR_UUID = '49535343-1e4d-4bd9-ba61-23c647249616';
-    let bleDevice;
-    let bleCharacteristic;
+    // RN4870視点: RX(書込用), TX(読取・通知用)
+    const RN4870_RX_CHAR_UUID = '49535343-8841-43f4-a8d4-ecbe34729bb3'; // タブレット -> PIC32
+    const RN4870_TX_CHAR_UUID = '49535343-1e4d-4bd9-ba61-23c647249616'; // PIC32 -> タブレット
 
-    // 受信データを行単位にまとめるためのバッファ
+    let bleDevice;
+    let rxCharacteristic; // 送信用
+    let txCharacteristic; // 受信用
     let receiveLineBuffer = '';
 
     const connectBtn = document.getElementById('ble-connect-btn');
 
     connectBtn.addEventListener('click', async () => {
+        if (bleDevice && bleDevice.gatt.connected) {
+            bleDevice.gatt.disconnect();
+            return;
+        }
+
         try {
+            connectBtn.disabled = true;
+            connectBtn.innerText = '接続中...';
+
             bleDevice = await navigator.bluetooth.requestDevice({
                 acceptAllDevices: true,
                 optionalServices: [RN4870_SERVICE_UUID]
             });
 
-            // 切断イベントの監視（切れたらボタンを赤く戻す）
             bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
 
             const server = await bleDevice.gatt.connect();
             const service = await server.getPrimaryService(RN4870_SERVICE_UUID);
             
-            bleCharacteristic = await service.getCharacteristic(RN4870_RX_CHAR_UUID);
+            // 送信用 (RX Characteristic)
+            rxCharacteristic = await service.getCharacteristic(RN4870_RX_CHAR_UUID);
             
-            const txChar = await service.getCharacteristic(RN4870_TX_CHAR_UUID);
-            await txChar.startNotifications();
-            txChar.addEventListener('characteristicvaluechanged', handleBleReceive);
+            // 受信用 (TX Characteristic) - 通知を有効化
+            txCharacteristic = await service.getCharacteristic(RN4870_TX_CHAR_UUID);
+            await txCharacteristic.startNotifications();
+            txCharacteristic.addEventListener('characteristicvaluechanged', handleBleReceive);
 
             connectBtn.innerText = '接続済み';
             connectBtn.style.backgroundColor = '#28a745';
+            connectBtn.disabled = false;
+
+            const logArea = document.getElementById('log-data-area');
+            logArea.innerHTML += `<p style="color: green; margin: 2px 0;">[BLE]: 双方向通信が準備完了しました</p>`;
         } catch (error) {
             console.error('BLE Connection Error:', error);
             onDisconnected();
-            // ★ エラー内容を画面のログエリアに直接出力
             const logArea = document.getElementById('log-data-area');
-            logArea.innerHTML += `<p style="color: red; margin: 2px 0;">[接続エラー]: ${error.name} - ${error.message}</p>`;
-            logArea.scrollTop = logArea.scrollHeight;
+            logArea.innerHTML += `<p style="color: red; margin: 2px 0;">[接続エラー]: ${error.message}</p>`;
         }
     });
 
     function onDisconnected() {
-        bleCharacteristic = null;
-        connectBtn.innerText = '切断されました (再接続)';
-        connectBtn.style.backgroundColor = '#dc3545';
+        rxCharacteristic = null;
+        txCharacteristic = null;
+        connectBtn.innerText = 'RN4870 (BLE) に接続';
+        connectBtn.style.backgroundColor = 'var(--highlight)';
+        connectBtn.disabled = false;
+        receiveLineBuffer = '';
+
         const logArea = document.getElementById('log-data-area');
         logArea.innerHTML += `<p style="color: red; margin: 2px 0;">[BLE]: 切断されました</p>`;
+        logArea.scrollTop = logArea.scrollHeight;
+    }
+
+    // ★ データ送信処理（writeValueWithoutResponse を優先する安全な方式）
+    async function sendBleData(text) {
+        if (!rxCharacteristic) {
+            alert('BLEデバイスに接続されていません。');
+            return;
+        }
+        const encoder = new TextEncoder();
+        const data = encoder.encode(text);
+
+        try {
+            if (rxCharacteristic.writeValueWithoutResponse) {
+                await rxCharacteristic.writeValueWithoutResponse(data);
+            } else {
+                await rxCharacteristic.writeValue(data);
+            }
+        } catch (e) {
+            await rxCharacteristic.writeValue(data);
+        }
     }
 
     // 1バイト単位で細切れに届くデータを「改行」で1行にまとめて処理
