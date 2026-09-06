@@ -328,7 +328,11 @@
             connectBtn.style.backgroundColor = '#28a745';
         } catch (error) {
             console.error('BLE Connection Error:', error);
-            alert('接続に失敗しました: ' + error.message);
+            onDisconnected();
+            // ★ エラー内容を画面のログエリアに直接出力
+            const logArea = document.getElementById('log-data-area');
+            logArea.innerHTML += `<p style="color: red; margin: 2px 0;">[接続エラー]: ${error.name} - ${error.message}</p>`;
+            logArea.scrollTop = logArea.scrollHeight;
         }
     });
 
