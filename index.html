@@ -276,7 +276,7 @@
         document.getElementById('fetch-enter-btn').style.display = 'none';
 
         if (bleCharacteristic) {
-            const cmd = `GET_LOG,${targetMonth},${targetDay}\n`;
+            const cmd = `GET_LOG,${targetMonth},${targetDay}\r\n`;
             sendBleData(cmd);
         }
     }
@@ -385,7 +385,7 @@
             alert('水深と時間を設定してください。');
             return;
         }
-        const cmd = `SET,${depthVal},${timeVal}\n`;
+        const cmd = `SET,${depthVal},${timeVal}\r\n`;
         await sendBleData(cmd);
         
         const logArea = document.getElementById('log-data-area');
