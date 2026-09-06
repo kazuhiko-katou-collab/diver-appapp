@@ -275,7 +275,7 @@
         document.getElementById('fetch-result-area').innerHTML = '';
         document.getElementById('fetch-enter-btn').style.display = 'none';
 
-        if (bleCharacteristic) {
+        if (rxCharacteristic) {
             const cmd = `GET_LOG,${targetMonth},${targetDay}\r\n`;
             sendBleData(cmd);
         }
@@ -286,7 +286,7 @@
     }
 
     function sendLogData() {
-        if (!bleCharacteristic) {
+        if (!rxCharacteristic) {
             alert('BLEデバイスに接続されていません。');
             return;
         }
@@ -418,7 +418,7 @@
     }
 
     async function sendSettings() {
-        if (!bleCharacteristic) {
+        if (!rxCharacteristic) {
             alert('BLEデバイスに接続されていません。');
             return;
         }
@@ -432,11 +432,6 @@
         const logArea = document.getElementById('log-data-area');
         logArea.innerHTML += `<p style="color: green; margin: 2px 0;">[送信]: ${cmd.trim()}</p>`;
         logArea.scrollTop = logArea.scrollHeight;
-    }
-
-    async function sendBleData(text) {
-        const encoder = new TextEncoder();
-        await bleCharacteristic.writeValue(encoder.encode(text));
     }
 </script>
 
