@@ -413,7 +413,11 @@
         if (line.includes('[OK_TIME]')) {
             appendLog('時刻を設定しました', 'green');
         } else if (line.includes('[NG]')) {
-            appendLog('エラー: 時刻の設定に失敗しました ' + line, 'red');
+            if (line.includes('SET_TIME')) {
+                appendLog('時刻の設定に失敗しました', 'red');
+            } else {
+                appendLog('エラー: ' + line, 'red');
+            }
         } else if (line.includes('[TIME]')) {
             appendLog(line, 'green');
         }
