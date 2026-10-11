@@ -117,6 +117,28 @@
             max-height: 200px;
             overflow-y: auto;
         }
+        /* 診断用: 任意コマンド送信欄 */
+        #custom-cmd-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        #custom-cmd-input {
+            flex: 1;
+            min-width: 0;
+            font-size: 16px;
+            padding: 8px;
+            border: 1px solid var(--text-color);
+            border-radius: 4px;
+        }
+        #custom-cmd-send {
+            font-size: 16px;
+            padding: 8px 14px;
+            border: 1px solid var(--text-color);
+            background: var(--btn-color);
+            border-radius: 4px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -145,6 +167,12 @@
         </div>
 
         <div id="log-data-area"></div>
+
+        <!-- 診断用: 任意のコマンドを送信(末尾にCRLFを付ける) -->
+        <div id="custom-cmd-row">
+            <input id="custom-cmd-input" type="text" placeholder="コマンド (例: RTC_DIAG)" autocomplete="off" autocapitalize="off" spellcheck="false">
+            <button id="custom-cmd-send" onclick="sendCustomCommand()">送信</button>
+        </div>
     </div>
 
     <!-- 2. テンキー画面 -->
@@ -406,7 +434,7 @@
 
     function processReceivedLine(line) {
         const logArea = document.getElementById('log-data-area');
-        logArea.innerHTML += `<p style="color: blue; margin: 2px 0;">[PIC32から受信]: ${line}</p>`;
+        logArea.innerHTML += `<p style="color: blue; margin: 2px 0;">[PIC32から受信]: ${escapeHtml(line)}</p>`;
         logArea.scrollTop = logArea.scrollHeight;
 
         // 時刻合わせ関連の応答
@@ -478,6 +506,29 @@
         logArea.innerHTML += `<p style="color: green; margin: 2px 0;">[送信]: ${cmd.trim()}</p>`;
         logArea.scrollTop = logArea.scrollHeight;
     }
+
+    // 診断用: 入力欄の文字列に CRLF を付けてそのまま送る
+    function escapeHtml(s) {
+        return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    async function sendCustomCommand() {
+        const input = document.getElementById('custom-cmd-input');
+        const text = input.value.trim();
+        if (!text) return;
+        if (!rxCharacteristic) {
+            alert('BLEデバイスに接続されていません。');
+            return;
+        }
+        await sendBleData(text + '\r\n');
+        appendLog('[送信]: ' + escapeHtml(text), 'green');
+        input.value = '';
+    }
+
+    document.getElementById('custom-cmd-input').addEventListener('keydown', e => {
+        if (e.key === 'Enter') sendCustomCommand();
+    });
+
 </script>
 
 </body>
