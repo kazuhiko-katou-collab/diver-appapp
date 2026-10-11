@@ -141,6 +141,7 @@
             <button class="btn-main" onclick="sendSettings()">送信</button>
             <button class="btn-main" onclick="openKeypad('log_month')">ログ受信</button>
             <button class="btn-main" onclick="sendLogData()">ログ送信</button>
+            <button class="btn-main" onclick="requestTime()">時刻確認</button>
         </div>
 
         <div id="log-data-area"></div>
@@ -340,6 +341,9 @@
 
             const logArea = document.getElementById('log-data-area');
             logArea.innerHTML += `<p style="color: green; margin: 2px 0;">[BLE]: 双方向通信が準備完了しました</p>`;
+
+            // 接続完了後に時刻合わせを自動送信
+            await sendTimeSync();
         } catch (error) {
             console.error('BLE Connection Error:', error);
             onDisconnected();
@@ -405,6 +409,15 @@
         logArea.innerHTML += `<p style="color: blue; margin: 2px 0;">[PIC32から受信]: ${line}</p>`;
         logArea.scrollTop = logArea.scrollHeight;
 
+        // 時刻合わせ関連の応答
+        if (line.includes('[OK_TIME]')) {
+            appendLog('時刻を設定しました', 'green');
+        } else if (line.includes('[NG]')) {
+            appendLog('エラー: 時刻の設定に失敗しました ' + line, 'red');
+        } else if (line.includes('[TIME]')) {
+            appendLog(line, 'green');
+        }
+
         // ログ取得画面が開いている場合の受信処理
         if (screens.fetch.classList.contains('active')) {
             const resultArea = document.getElementById('fetch-result-area');
@@ -415,6 +428,34 @@
                 document.getElementById('fetch-enter-btn').style.display = 'block';
             }
         }
+    }
+
+    function appendLog(message, color) {
+        const logArea = document.getElementById('log-data-area');
+        logArea.innerHTML += `<p style="color: ${color}; margin: 2px 0;">${message}</p>`;
+        logArea.scrollTop = logArea.scrollHeight;
+    }
+
+    // スマホのローカル時刻を取得し SET_TIME,YYYY,MM,DD,hh,mm,ss を送信（送信直前に取得）
+    async function sendTimeSync() {
+        try {
+            const now = new Date();
+            const p2 = n => String(n).padStart(2, '0');
+            const cmd = `SET_TIME,${now.getFullYear()},${p2(now.getMonth() + 1)},${p2(now.getDate())},${p2(now.getHours())},${p2(now.getMinutes())},${p2(now.getSeconds())}\r\n`;
+            await sendBleData(cmd);
+            appendLog(`[送信]: ${cmd.trim()}`, 'green');
+        } catch (e) {
+            appendLog(`[時刻送信エラー]: ${e.message}`, 'red');
+        }
+    }
+
+    async function requestTime() {
+        if (!rxCharacteristic) {
+            alert('BLEデバイスに接続されていません。');
+            return;
+        }
+        await sendBleData('GET_TIME\r\n');
+        appendLog('[送信]: GET_TIME', 'green');
     }
 
     async function sendSettings() {
